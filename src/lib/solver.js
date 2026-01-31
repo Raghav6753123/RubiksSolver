@@ -2,7 +2,8 @@
 // This abstraction layer allows you to swap the solver implementation later
 // (e.g., replace with C++ backend via HTTP API)
 
-const SOLVER_API_BASE = process.env.REACT_APP_SOLVER_API || "http://localhost:5000";
+const SOLVER_API_BASE =
+  import.meta.env.VITE_SOLVER_API || "http://localhost:5000";
 
 /**
  * Solve a Rubik's cube given its current state
