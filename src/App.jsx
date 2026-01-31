@@ -1,21 +1,26 @@
-import React, { useState, useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import CubeNet from "./components/CubeNet";
 import Cube3D from "./components/Cube3D";
-import { initializeCubeState, stateFromNet } from "./lib/cubeState";
-import { solveCube } from "./lib/solver";
+import { stateFromNet } from "./lib/cubeState";
+import { parseMoveString, solveCube } from "./lib/solver";
+import { useCubeStore } from "./lib/useCubeStore";
 
 function App() {
-  const [cubeState, setCubeState] = useState(initializeCubeState());
-  const [moves, setMoves] = useState("");
-  const [isAnimating, setIsAnimating] = useState(false);
+  const cubeState = useCubeStore((s) => s.cubeState);
+  const setSticker = useCubeStore((s) => s.setSticker);
+  const setMoves = useCubeStore((s) => s.setMoves);
+  const reset = useCubeStore((s) => s.reset);
+  const isAnimating = useCubeStore((s) => s.isAnimating);
+  const moves = useCubeStore((s) => s.moves);
+  const moveIndex = useCubeStore((s) => s.moveIndex);
+  const requestStep = useCubeStore((s) => s.requestStep);
+  const play = useCubeStore((s) => s.play);
+  const pause = useCubeStore((s) => s.pause);
+  const isPlaying = useCubeStore((s) => s.isPlaying);
   const [error, setError] = useState("");
 
   const handleSticker = useCallback((face, index, color) => {
-    setCubeState((prev) => {
-      const newState = { ...prev };
-      newState[face][index] = color;
-      return newState;
-    });
+    setSticker(face, index, color);
   }, []);
 
   const handleSolve = useCallback(async () => {
@@ -28,16 +33,15 @@ function App() {
       
       // Call backend solver API
       const solution = await solveCube(stateString);
-      setMoves(solution);
+      const parsed = parseMoveString(solution);
+      setMoves(parsed);
     } catch (err) {
       setError(err.message || "Failed to solve cube");
-      setIsAnimating(false);
     }
   }, [cubeState]);
 
   const handleReset = useCallback(() => {
-    setCubeState(initializeCubeState());
-    setMoves("");
+    reset();
     setError("");
   }, []);
 
@@ -84,18 +88,55 @@ function App() {
               </button>
             </div>
 
+            {/* Playback Controls */}
+            <div className="mt-6 flex gap-3">
+              <button
+                onClick={() => requestStep(-1)}
+                disabled={isAnimating || moveIndex === 0}
+                className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-semibold transition-all"
+              >
+                Prev
+              </button>
+              {isPlaying ? (
+                <button
+                  onClick={pause}
+                  disabled={isAnimating}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-semibold transition-all"
+                >
+                  Pause
+                </button>
+              ) : (
+                <button
+                  onClick={play}
+                  disabled={isAnimating || moves.length === 0}
+                  className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-semibold transition-all"
+                >
+                  Play
+                </button>
+              )}
+              <button
+                onClick={() => requestStep(1)}
+                disabled={isAnimating || moveIndex >= moves.length}
+                className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded-lg font-semibold transition-all"
+              >
+                Next
+              </button>
+            </div>
+
             {/* Moves Display */}
-            {moves && (
+            {moves.length > 0 && (
               <div className="mt-6 p-4 bg-slate-700 rounded-lg">
                 <p className="text-sm text-slate-300 mb-2">Solution moves:</p>
-                <p className="text-lg font-mono text-cyan-400 break-words">{moves}</p>
+                <p className="text-lg font-mono text-cyan-400 break-words">
+                  {moves.map((m) => m.notation).join(" ")}
+                </p>
               </div>
             )}
           </div>
 
           {/* Right Panel: 3D Visualization */}
           <div className="bg-slate-900/80 rounded-xl shadow-2xl border border-slate-800 overflow-hidden" style={{ minHeight: "600px" }}>
-            <Cube3D cubeState={cubeState} moves={moves} onAnimationComplete={() => setIsAnimating(false)} />
+            <Cube3D />
           </div>
         </div>
       </div>

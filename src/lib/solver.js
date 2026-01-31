@@ -51,27 +51,65 @@ function demoSolve(stateString) {
  * @returns {Array<{face: string, times: number, prime: boolean}>}
  */
 export function parseMoves(moveString) {
+  return parseMoveString(moveString);
+}
+
+/**
+ * Parse move string into array of { face, turns, notation }
+ * turns: 1=90°, 2=180°, 3=270° (prime)
+ */
+export function parseMoveString(moveString) {
   const moves = [];
-  const tokens = moveString.trim().split(/\s+/);
+  const tokens = moveString.trim().split(/\s+/).filter(Boolean);
 
   tokens.forEach((token) => {
-    if (!token) return;
+    const face = token[0];
+    const modifier = token.slice(1);
+    let turns = 1;
 
-    const face = token[0]; // U, R, F, D, L, B
-    const modifier = token.slice(1); // "", "2", "'", "w", etc.
+    if (modifier.includes("2")) turns = 2;
+    if (modifier.includes("'")) turns = 3;
 
-    let times = 1;
-    let prime = false;
-
-    if (modifier.includes("2")) times = 2;
-    if (modifier.includes("'")) prime = true;
-
-    moves.push({
-      face,
-      times: prime ? 3 - times : times, // Convert prime: U' = 3x U = 270°
-      prime,
-    });
+    moves.push({ face, turns, notation: token });
   });
 
   return moves;
+}
+
+/**
+ * Invert a move (e.g., R -> R', R' -> R, R2 -> R2)
+ */
+export function invertMove(move) {
+  if (!move) return null;
+  const turns = move.turns === 2 ? 2 : move.turns === 1 ? 3 : 1;
+  return { ...move, turns };
+}
+
+/**
+ * Translate a move into axis + angle data for 3D rotation
+ */
+export function moveToRotation(move) {
+  const axisMap = {
+    U: "Y",
+    D: "Y",
+    L: "X",
+    R: "X",
+    F: "Z",
+    B: "Z",
+  };
+
+  const signMap = {
+    U: 1,
+    D: -1,
+    L: -1,
+    R: 1,
+    F: 1,
+    B: -1,
+  };
+
+  const axis = axisMap[move.face] || "Y";
+  const sign = signMap[move.face] || 1;
+  const angle = (Math.PI / 2) * move.turns * sign;
+
+  return { axis, angle };
 }

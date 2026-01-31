@@ -1,143 +1,231 @@
-import React, { useEffect, useImperativeHandle, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import { parseAndAnimateMoves } from "../lib/cubeAnimation";
+import gsap from "gsap";
+import { useCubeStore } from "../lib/useCubeStore";
+import { invertMove, moveToRotation } from "../lib/solver";
 
-function Cube3D({ cubeState, moves, onAnimationComplete }) {
-  const cubeRef = useRef();
-  const [isAnimating, setIsAnimating] = useState(false);
+const FACE_MAT_INDEX = {
+  R: 0,
+  L: 1,
+  U: 2,
+  D: 3,
+  F: 4,
+  B: 5,
+};
+
+function Cube3D() {
+  const cubeState = useCubeStore((s) => s.cubeState);
+  const moves = useCubeStore((s) => s.moves);
+  const moveIndex = useCubeStore((s) => s.moveIndex);
+  const isPlaying = useCubeStore((s) => s.isPlaying);
+  const isAnimating = useCubeStore((s) => s.isAnimating);
+  const setIsAnimating = useCubeStore((s) => s.setIsAnimating);
+  const setMoveIndex = useCubeStore((s) => s.setMoveIndex);
+  const pause = useCubeStore((s) => s.pause);
+  const stepRequestId = useCubeStore((s) => s.stepRequestId);
+  const stepDirection = useCubeStore((s) => s.stepDirection);
+
+  const groupRef = useRef();
+  const cubiesRef = useRef(new Map());
+  const coordToIdRef = useRef(new Map());
+
+  const geometry = useMemo(() => new THREE.BoxGeometry(0.98, 0.98, 0.98), []);
+
+  const cubieCoords = useMemo(() => {
+    const coords = [];
+    let id = 0;
+    for (let x = -1; x <= 1; x++) {
+      for (let y = -1; y <= 1; y++) {
+        for (let z = -1; z <= 1; z++) {
+          coords.push({ id: id++, x, y, z });
+        }
+      }
+    }
+    return coords;
+  }, []);
+
+  const cubies = useMemo(() => {
+    return cubieCoords.map((c) => ({
+      ...c,
+      materials: createMaterials(),
+    }));
+  }, [cubieCoords]);
 
   useEffect(() => {
-    if (moves && cubeRef.current && !isAnimating) {
+    const map = new Map();
+    cubieCoords.forEach((c) => map.set(coordKey(c), c.id));
+    coordToIdRef.current = map;
+  }, [cubieCoords]);
+
+  useEffect(() => {
+    if (!groupRef.current || isAnimating) return;
+    applyCubeStateToMaterials(cubeState, cubiesRef.current, coordToIdRef.current);
+  }, [cubeState, isAnimating]);
+
+  useEffect(() => {
+    if (!isPlaying || isAnimating) return;
+    const move = moves[moveIndex];
+    if (!move) {
+      pause();
+      return;
+    }
+
+    setIsAnimating(true);
+    animateMove(move).then(() => {
+      setMoveIndex(moveIndex + 1);
+      setIsAnimating(false);
+    });
+  }, [isPlaying, isAnimating, moveIndex, moves, pause, setIsAnimating, setMoveIndex]);
+
+  useEffect(() => {
+    if (isAnimating || moves.length === 0 || !stepRequestId) return;
+    if (stepDirection === 1) {
+      const move = moves[moveIndex];
+      if (!move) return;
       setIsAnimating(true);
-      parseAndAnimateMoves(cubeRef.current, moves, () => {
+      animateMove(move).then(() => {
+        setMoveIndex(moveIndex + 1);
         setIsAnimating(false);
-        onAnimationComplete?.();
+      });
+    } else if (stepDirection === -1) {
+      const prevMove = moves[moveIndex - 1];
+      if (!prevMove) return;
+      setIsAnimating(true);
+      animateMove(invertMove(prevMove)).then(() => {
+        setMoveIndex(moveIndex - 1);
+        setIsAnimating(false);
       });
     }
-  }, [moves, isAnimating, onAnimationComplete]);
+  }, [stepRequestId]);
+
+  const animateMove = (move) => {
+    const { axis, angle } = moveToRotation(move);
+    const axisVector = axis === "X" ? new THREE.Vector3(1, 0, 0) : axis === "Y" ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, 1);
+
+    const cubies = getCubiesForFace(cubiesRef.current, move.face);
+    return rotateCubies(groupRef.current, cubies, axisVector, angle);
+  };
 
   return (
-    <Canvas camera={{ position: [4, 4, 4], fov: 50 }} className="w-full h-full">
-      <ambientLight intensity={0.5} />
-      <pointLight position={[10, 10, 10]} intensity={1} />
-      <CubeModel ref={cubeRef} cubeState={cubeState} />
-      <OrbitControls enableDamping dampingFactor={0.08} autoRotate={!isAnimating} autoRotateSpeed={1.2} />
+    <Canvas camera={{ position: [4.2, 4.2, 4.2], fov: 50 }} className="w-full h-full">
+      <ambientLight intensity={0.6} />
+      <pointLight position={[10, 10, 10]} intensity={1.2} />
+      <group ref={groupRef}>
+        {cubies.map((c) => (
+          <mesh
+            key={c.id}
+            geometry={geometry}
+            material={c.materials}
+            position={[c.x * 1.05, c.y * 1.05, c.z * 1.05]}
+            ref={(el) => {
+              if (el) {
+                cubiesRef.current.set(c.id, {
+                  mesh: el,
+                  coord: { x: c.x, y: c.y, z: c.z },
+                });
+              }
+            }}
+          />
+        ))}
+      </group>
+      <OrbitControls enableDamping dampingFactor={0.08} autoRotate={!isAnimating} autoRotateSpeed={1} />
     </Canvas>
   );
 }
 
-const CubeModel = React.forwardRef(({ cubeState }, ref) => {
-  const groupRef = useRef();
-  const apiRef = useRef({ group: null, cubies: [], rotationAxes: {} });
-
-  useImperativeHandle(ref, () => apiRef.current, []);
-
-  useEffect(() => {
-    if (!groupRef.current) return;
-
-    // Clear existing cubies
-    while (groupRef.current.children.length > 0) {
-      groupRef.current.remove(groupRef.current.children[0]);
-    }
-
-    // Create 27 cubies
-    const cubies = [];
-    for (let x = -1; x <= 1; x++) {
-      for (let y = -1; y <= 1; y++) {
-        for (let z = -1; z <= 1; z++) {
-          const cubyGroup = new THREE.Group();
-          cubyGroup.position.set(x * 1.05, y * 1.05, z * 1.05);
-          cubyGroup.userData.originalPosition = { x, y, z };
-
-          // Create 6 faces for each cuby
-          const faces = createCubyFaces(x, y, z, cubeState);
-          faces.forEach((face) => cubyGroup.add(face));
-
-          cubies.push(cubyGroup);
-          groupRef.current.add(cubyGroup);
-        }
-      }
-    }
-
-    apiRef.current = {
-      group: groupRef.current,
-      cubies: cubies,
-      rotationAxes: {
-        X: new THREE.Vector3(1, 0, 0),
-        Y: new THREE.Vector3(0, 1, 0),
-        Z: new THREE.Vector3(0, 0, 1),
-      },
-    };
-  }, [cubeState]);
-
-  return <group ref={groupRef} />;
-});
-
-function createCubyFaces(x, y, z, cubeState) {
-  const faces = [];
-  const size = 1;
-  const positions = {
-    // X axis
-    "-X": { position: [-size / 2, 0, 0], normal: [-1, 0, 0], face: "L" },
-    "+X": { position: [size / 2, 0, 0], normal: [1, 0, 0], face: "R" },
-    // Y axis
-    "-Y": { position: [0, -size / 2, 0], normal: [0, -1, 0], face: "D" },
-    "+Y": { position: [0, size / 2, 0], normal: [0, 1, 0], face: "U" },
-    // Z axis
-    "-Z": { position: [0, 0, -size / 2], normal: [0, 0, -1], face: "B" },
-    "+Z": { position: [0, 0, size / 2], normal: [0, 0, 1], face: "F" },
-  };
-
-  Object.entries(positions).forEach(([key, data]) => {
-    // Only add face if it's on the surface
-    if (
-      (key === "-X" && x === -1) ||
-      (key === "+X" && x === 1) ||
-      (key === "-Y" && y === -1) ||
-      (key === "+Y" && y === 1) ||
-      (key === "-Z" && z === -1) ||
-      (key === "+Z" && z === 1)
-    ) {
-      const geometry = new THREE.BoxGeometry(0.95, 0.95, 0.01);
-      const color = getColorForFace(data.face, x, y, z, cubeState);
-      const material = new THREE.MeshStandardMaterial({
-        color: color,
-        metalness: 0.3,
-        roughness: 0.4,
-      });
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.fromArray(data.position);
-      mesh.userData.color = color;
-      faces.push(mesh);
-    }
-  });
-
-  // Add black edge to all cubies
-  const edgeGeometry = new THREE.BoxGeometry(1, 1, 1);
-  const edgeMaterial = new THREE.MeshStandardMaterial({
-    color: 0x1a1a1a,
-    metalness: 0.5,
-    roughness: 0.5,
-  });
-  const edgeMesh = new THREE.Mesh(edgeGeometry, edgeMaterial);
-  faces.push(edgeMesh);
-
-  return faces;
+function createMaterials() {
+  const dark = new THREE.Color("#0f172a");
+  return [
+    new THREE.MeshStandardMaterial({ color: dark, metalness: 0.2, roughness: 0.6 }), // R
+    new THREE.MeshStandardMaterial({ color: dark, metalness: 0.2, roughness: 0.6 }), // L
+    new THREE.MeshStandardMaterial({ color: dark, metalness: 0.2, roughness: 0.6 }), // U
+    new THREE.MeshStandardMaterial({ color: dark, metalness: 0.2, roughness: 0.6 }), // D
+    new THREE.MeshStandardMaterial({ color: dark, metalness: 0.2, roughness: 0.6 }), // F
+    new THREE.MeshStandardMaterial({ color: dark, metalness: 0.2, roughness: 0.6 }), // B
+  ];
 }
 
-function getColorForFace(face, x, y, z, cubeState) {
-  // Map cuby position to sticker indices
-  const colorMap = {
-    U: cubeState.U[(y === 1 ? 0 : y === 0 ? 3 : 6) + (x === -1 ? 0 : x === 0 ? 1 : 2)],
-    D: cubeState.D[(y === -1 ? 0 : y === 0 ? 3 : 6) + (x === -1 ? 0 : x === 0 ? 1 : 2)],
-    L: cubeState.L[(x === -1 ? 0 : x === 0 ? 3 : 6) + (z === 1 ? 0 : z === 0 ? 1 : 2)],
-    R: cubeState.R[(x === 1 ? 0 : x === 0 ? 3 : 6) + (z === -1 ? 0 : z === 0 ? 1 : 2)],
-    F: cubeState.F[(z === 1 ? 0 : z === 0 ? 3 : 6) + (x === -1 ? 0 : x === 0 ? 1 : 2)],
-    B: cubeState.B[(z === -1 ? 0 : z === 0 ? 3 : 6) + (x === 1 ? 0 : x === 0 ? 1 : 2)],
-  };
-  return colorMap[face];
+function applyCubeStateToMaterials(cubeState, cubiesMap, coordToIdMap) {
+  Object.entries(cubeState).forEach(([face, stickers]) => {
+    stickers.forEach((color, index) => {
+      const coord = getCoordForFaceIndex(face, index);
+      const id = coordToIdMap.get(coordKey(coord));
+      if (id === undefined) return;
+      const cuby = cubiesMap.get(id);
+      if (!cuby) return;
+      const matIndex = FACE_MAT_INDEX[face];
+      const material = cuby.mesh.material[matIndex];
+      if (material) material.color.set(color);
+    });
+  });
+}
+
+function rotateCubies(group, cubies, axis, angle) {
+  return new Promise((resolve) => {
+    const pivot = new THREE.Group();
+    group.add(pivot);
+
+    cubies.forEach((c) => pivot.attach(c.mesh));
+
+    const state = { t: 0 };
+    gsap.to(state, {
+      t: 1,
+      duration: 0.45,
+      ease: "power2.inOut",
+      onUpdate: () => {
+        const q = new THREE.Quaternion();
+        q.setFromAxisAngle(axis, angle * state.t);
+        pivot.quaternion.copy(q);
+      },
+      onComplete: () => {
+        pivot.updateMatrixWorld(true);
+        cubies.forEach((c) => {
+          group.attach(c.mesh);
+          const rounded = {
+            x: Math.round(c.mesh.position.x / 1.05),
+            y: Math.round(c.mesh.position.y / 1.05),
+            z: Math.round(c.mesh.position.z / 1.05),
+          };
+          c.coord = rounded;
+          c.mesh.position.set(rounded.x * 1.05, rounded.y * 1.05, rounded.z * 1.05);
+        });
+        group.remove(pivot);
+        resolve();
+      },
+    });
+  });
+}
+
+function getCubiesForFace(cubiesMap, face) {
+  const result = [];
+  cubiesMap.forEach((c) => {
+    if (face === "U" && c.coord.y === 1) result.push(c);
+    if (face === "D" && c.coord.y === -1) result.push(c);
+    if (face === "L" && c.coord.x === -1) result.push(c);
+    if (face === "R" && c.coord.x === 1) result.push(c);
+    if (face === "F" && c.coord.z === 1) result.push(c);
+    if (face === "B" && c.coord.z === -1) result.push(c);
+  });
+  return result;
+}
+
+function getCoordForFaceIndex(face, index) {
+  const row = Math.floor(index / 3);
+  const col = index % 3;
+
+  if (face === "U") return { x: col - 1, y: 1, z: row - 1 };
+  if (face === "D") return { x: col - 1, y: -1, z: 1 - row };
+  if (face === "F") return { x: col - 1, y: 1 - row, z: 1 };
+  if (face === "B") return { x: 1 - col, y: 1 - row, z: -1 };
+  if (face === "L") return { x: -1, y: 1 - row, z: col - 1 };
+  if (face === "R") return { x: 1, y: 1 - row, z: 1 - col };
+  return { x: 0, y: 0, z: 0 };
+}
+
+function coordKey({ x, y, z }) {
+  return `${x},${y},${z}`;
 }
 
 export default Cube3D;
