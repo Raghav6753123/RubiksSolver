@@ -27,7 +27,7 @@ function CubeNet({ cubeState, onSticker }) {
     <div className="space-y-6">
       {/* Color Palette */}
       <div>
-        <p className="text-sm text-slate-300 mb-3">Select color:</p>
+        <p className="text-sm text-slate-400 mb-3">Select color:</p>
         <div className="flex gap-3 flex-wrap">
           {COLORS.map((color) => (
             <button
@@ -36,7 +36,7 @@ function CubeNet({ cubeState, onSticker }) {
               className={`w-12 h-12 rounded-full border-2 transition-all duration-200 shadow-md hover:scale-110 ${
                 activeColor === color.code
                   ? "border-white scale-110"
-                  : "border-slate-600 hover:border-slate-400"
+                  : "border-slate-700 hover:border-slate-500"
               }`}
               style={{ backgroundColor: color.code }}
               title={color.name}

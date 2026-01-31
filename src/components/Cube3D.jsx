@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
@@ -23,13 +23,16 @@ function Cube3D({ cubeState, moves, onAnimationComplete }) {
       <ambientLight intensity={0.5} />
       <pointLight position={[10, 10, 10]} intensity={1} />
       <CubeModel ref={cubeRef} cubeState={cubeState} />
-      <OrbitControls autoRotate={!isAnimating} autoRotateSpeed={2} />
+      <OrbitControls enableDamping dampingFactor={0.08} autoRotate={!isAnimating} autoRotateSpeed={1.2} />
     </Canvas>
   );
 }
 
 const CubeModel = React.forwardRef(({ cubeState }, ref) => {
   const groupRef = useRef();
+  const apiRef = useRef({ group: null, cubies: [], rotationAxes: {} });
+
+  useImperativeHandle(ref, () => apiRef.current, []);
 
   useEffect(() => {
     if (!groupRef.current) return;
@@ -58,7 +61,7 @@ const CubeModel = React.forwardRef(({ cubeState }, ref) => {
       }
     }
 
-    ref.current = {
+    apiRef.current = {
       group: groupRef.current,
       cubies: cubies,
       rotationAxes: {
@@ -67,7 +70,7 @@ const CubeModel = React.forwardRef(({ cubeState }, ref) => {
         Z: new THREE.Vector3(0, 0, 1),
       },
     };
-  }, [cubeState, ref]);
+  }, [cubeState]);
 
   return <group ref={groupRef} />;
 });

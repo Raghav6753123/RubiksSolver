@@ -42,11 +42,15 @@ function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white p-6">
+    <div className="min-h-screen bg-slate-950 text-slate-100 p-6">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <h1 className="text-4xl font-bold mb-2 text-center">Rubik's Cube Solver</h1>
-        <p className="text-center text-slate-400 mb-8">Paint the cube state and solve it</p>
+        <h1 className="text-4xl font-bold mb-2 text-center text-slate-100">
+          Rubik's Cube Solver
+        </h1>
+        <p className="text-center text-slate-500 mb-8">
+          Paint the cube state and solve it
+        </p>
 
         {/* Error Alert */}
         {error && (
@@ -58,7 +62,7 @@ function App() {
         {/* Main Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Left Panel: Input */}
-          <div className="bg-slate-800 rounded-xl p-8 shadow-xl">
+          <div className="bg-slate-900/80 rounded-xl p-8 shadow-2xl border border-slate-800">
             <h2 className="text-2xl font-semibold mb-6">Cube Net</h2>
             <CubeNet cubeState={cubeState} onSticker={handleSticker} />
             
@@ -67,14 +71,14 @@ function App() {
               <button
                 onClick={handleSolve}
                 disabled={isAnimating}
-                className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-semibold transition-all duration-200 shadow-lg"
+                className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-semibold transition-all duration-200 shadow-[0_0_30px_rgba(59,130,246,0.35)]"
               >
                 {isAnimating ? "Solving..." : "Solve"}
               </button>
               <button
                 onClick={handleReset}
                 disabled={isAnimating}
-                className="flex-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-semibold transition-all duration-200"
+                className="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-3 rounded-lg font-semibold transition-all duration-200"
               >
                 Reset
               </button>
@@ -90,7 +94,7 @@ function App() {
           </div>
 
           {/* Right Panel: 3D Visualization */}
-          <div className="bg-slate-800 rounded-xl shadow-xl overflow-hidden" style={{ minHeight: "600px" }}>
+          <div className="bg-slate-900/80 rounded-xl shadow-2xl border border-slate-800 overflow-hidden" style={{ minHeight: "600px" }}>
             <Cube3D cubeState={cubeState} moves={moves} onAnimationComplete={() => setIsAnimating(false)} />
           </div>
         </div>

@@ -26,6 +26,12 @@ function animateFaceRotation(cubeRef, face, times = 1) {
     const direction = 1; // Can be -1 for inverse
     const targetRotation = (Math.PI / 2) * times * direction;
 
+    const group = cubeRef.group;
+    const cubies = getCubiesForFace(group, face);
+    const pivot = new THREE.Group();
+    group.add(pivot);
+    cubies.forEach((cuby) => pivot.attach(cuby));
+
     const animate = () => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / totalDuration, 1);
@@ -33,28 +39,21 @@ function animateFaceRotation(cubeRef, face, times = 1) {
       // Easing: ease-in-out
       const easeProgress = progress < 0.5 ? 2 * progress * progress : -1 + (4 - 2 * progress) * progress;
 
-      // Get cubies that should rotate
-      const cubies = getCubiesForFace(cubeRef.group, face);
-
-      // Apply rotation
-      cubies.forEach((cuby) => {
-        // Reset rotation
-        cuby.rotation.set(0, 0, 0, "XYZ");
-
-        // Apply new rotation around axis
-        const quaternion = new THREE.Quaternion();
-        quaternion.setFromAxisAngle(axis, targetRotation * easeProgress);
-        cuby.quaternion.copy(quaternion);
-      });
+      // Apply rotation to pivot
+      const quaternion = new THREE.Quaternion();
+      quaternion.setFromAxisAngle(axis, targetRotation * easeProgress);
+      pivot.quaternion.copy(quaternion);
 
       if (progress < 1) {
         requestAnimationFrame(animate);
       } else {
         // Finalize positions
+        pivot.updateMatrixWorld(true);
         cubies.forEach((cuby) => {
-          cuby.quaternion.normalize();
-          updateCubyPosition(cuby, axis, times);
+          group.attach(cuby);
+          updateCubyPosition(cuby);
         });
+        group.remove(pivot);
         resolve();
       }
     };
@@ -83,7 +82,6 @@ function getFaceAxis(face) {
  */
 function getCubiesForFace(group, face) {
   const cubies = [];
-  const threshold = 0.6;
 
   group.children.forEach((cuby) => {
     const pos = cuby.userData.originalPosition;
@@ -116,25 +114,13 @@ function getCubiesForFace(group, face) {
 /**
  * Update cuby position after rotation
  */
-function updateCubyPosition(cuby, axis, times) {
-  const pos = cuby.userData.originalPosition;
-  const angleRad = (Math.PI / 2) * times;
-
-  // Rotate position around axis
-  const rotatedPos = new THREE.Vector3(pos.x, pos.y, pos.z);
-  rotatedPos.applyAxisAngle(axis, angleRad);
-
-  // Round to nearest grid position
-  cuby.userData.originalPosition = {
-    x: Math.round(rotatedPos.x),
-    y: Math.round(rotatedPos.y),
-    z: Math.round(rotatedPos.z),
+function updateCubyPosition(cuby) {
+  const rounded = {
+    x: Math.round(cuby.position.x / 1.05),
+    y: Math.round(cuby.position.y / 1.05),
+    z: Math.round(cuby.position.z / 1.05),
   };
 
-  // Update visual position
-  cuby.position.set(
-    cuby.userData.originalPosition.x * 1.05,
-    cuby.userData.originalPosition.y * 1.05,
-    cuby.userData.originalPosition.z * 1.05
-  );
+  cuby.userData.originalPosition = rounded;
+  cuby.position.set(rounded.x * 1.05, rounded.y * 1.05, rounded.z * 1.05);
 }
