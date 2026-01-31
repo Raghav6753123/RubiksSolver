@@ -36,7 +36,7 @@ const CubeModel = React.forwardRef(({ cubeState }, ref) => {
 
     // Clear existing cubies
     while (groupRef.current.children.length > 0) {
-      groupRef.current.removeChild(groupRef.current.children[0]);
+      groupRef.current.remove(groupRef.current.children[0]);
     }
 
     // Create 27 cubies
